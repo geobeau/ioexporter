@@ -1,0 +1,2 @@
+[workspace]
+members = ["xtask", "ioexporter", "ioexporter-common"]
