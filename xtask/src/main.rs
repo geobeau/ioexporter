@@ -16,7 +16,7 @@ pub struct Options {
 enum Command {
     BuildEbpf(build_ebpf::Options),
     Run(run::Options),
-    Codegen
+    Codegen,
 }
 
 fn main() {
