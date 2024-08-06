@@ -8,9 +8,9 @@ default = []
 user = ["aya"]
 
 [dependencies]
-aya = { git = "https://github.com/aya-rs/aya", optional = true }
-aya-bpf = { git = "https://github.com/aya-rs/aya" }
-aya-log-ebpf = { git = "https://github.com/aya-rs/aya" }
+aya = {version = "0.12", optional = true }
+aya-ebpf = "0.1.0"
+aya-log-ebpf = "0.1.0"
 
 [lib]
 path = "src/lib.rs"

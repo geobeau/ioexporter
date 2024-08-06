@@ -5,15 +5,17 @@ edition = "2021"
 publish = false
 
 [dependencies]
-aya = { git = "https://github.com/aya-rs/aya", features = ["async_tokio"] }
-aya-log = { git = "https://github.com/aya-rs/aya" }
+
 ioexporter-common = { path = "../ioexporter-common", features = ["user"] }
+aya = { version = "0.12", features = ["async_tokio"] }
+aya-log = "0.2"
 anyhow = "1"
 env_logger = "0.10"
 libc = "0.2"
 log = "0.4"
 tokio = { version = "1.25", features = ["macros", "rt", "rt-multi-thread", "net", "signal"] }
-histogram = { path = "../../bpf-histogram/histogram" }
+prometheus = "0.13.3"
+ebpf-histogram = "0.1.0"
 
 [[bin]]
 name = "ioexporter"

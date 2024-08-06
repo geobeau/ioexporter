@@ -8,9 +8,9 @@
 
 mod vmlinux;
 
-use aya_bpf::{macros::{kprobe, map, btf_tracepoint}, programs::{ProbeContext, BtfTracePointContext}, maps::{PerCpuArray}, helpers::bpf_ktime_get_ns};
+use aya_ebpf::{macros::{kprobe, map, btf_tracepoint}, programs::{ProbeContext, BtfTracePointContext}, maps::{PerCpuArray}, helpers::bpf_ktime_get_ns};
 use aya_log_ebpf::info;
-use histogram_ebpf::BpfHistogram;
+use ebpf_histogram_ebpf::BpfHistogram;
 
 
 #[derive(Copy, Clone)]
