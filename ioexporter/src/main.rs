@@ -5,10 +5,9 @@ use aya_log::BpfLogger;
 // use libc::name_t;
 use ebpf_histogram::{Histogram, Key, KeyWrapper};
 use log::{debug, info, warn};
+use phf::phf_map;
 use prometheus::{Opts, Registry, TextEncoder};
 use tokio::signal;
-use phf::{phf_map};
-
 
 static OP_CODE: phf::Map<u8, &'static str> = phf_map! {
     0x00u8 => "nvme_cmd_flush",
@@ -23,8 +22,6 @@ static OP_CODE: phf::Map<u8, &'static str> = phf_map! {
     0x11u8 => "nvme_cmd_resv_acquire",
     0x15u8 => "nvme_cmd_resv_release",
 };
-
-
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 // #[derive(Key)]
@@ -51,7 +48,7 @@ impl Key for DiskLatencyHistogramKey {
 #[repr(C)]
 pub struct NvneHistogramKey {
     // In practice, 31 first bytes are the disk and the last is opcode
-    // This is done because of adding a mere u8 would require adding 32 bytes to keep alignement 
+    // This is done because of adding a mere u8 would require adding 32 bytes to keep alignement
     pub opaque: [u8; 32],
 }
 
@@ -64,10 +61,12 @@ impl Key for NvneHistogramKey {
     }
 
     fn get_label_values(&self) -> Vec<String> {
-        vec![String::from_utf8_lossy(&self.opaque[0..31]).to_string(), OP_CODE[&self.opaque[31]].to_string()]
+        vec![
+            String::from_utf8_lossy(&self.opaque[0..31]).to_string(),
+            OP_CODE[&self.opaque[31]].to_string(),
+        ]
     }
 }
-
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
@@ -128,23 +127,30 @@ async fn main() -> Result<(), anyhow::Error> {
     program.load()?;
     program.attach("nvme", "nvme_complete_rq")?;
 
-
     let page_cache_metrics: PerCpuArray<_, u64> = PerCpuArray::try_from(
         bpf.take_map("PAGE_CACHE_METRICS")
             .expect("failed to map IP_MAP"),
     )?;
 
-    let io_latency_map: PerCpuHashMap<_, KeyWrapper<DiskLatencyHistogramKey>, u64> = PerCpuHashMap::try_from(
-        bpf.take_map("BLOCK_HISTOGRAM")
-            .expect("failed to map BLOCK_HISTOGRAM"),
-    )?;
-    let nvme_latency_map: PerCpuHashMap<_, KeyWrapper<NvneHistogramKey>, u64> = PerCpuHashMap::try_from(
-        bpf.take_map("NVME_HISTOGRAM")
-            .expect("failed to map NVME_HISTOGRAM"),
-    )?;
+    let io_latency_map: PerCpuHashMap<_, KeyWrapper<DiskLatencyHistogramKey>, u64> =
+        PerCpuHashMap::try_from(
+            bpf.take_map("BLOCK_HISTOGRAM")
+                .expect("failed to map BLOCK_HISTOGRAM"),
+        )?;
+    let nvme_latency_map: PerCpuHashMap<_, KeyWrapper<NvneHistogramKey>, u64> =
+        PerCpuHashMap::try_from(
+            bpf.take_map("NVME_HISTOGRAM")
+                .expect("failed to map NVME_HISTOGRAM"),
+        )?;
 
-    let io_latency_histogram: Histogram<DiskLatencyHistogramKey> = Histogram::new_from_map(io_latency_map, Opts::new("io_disk_latency", "Histogram of IO latency"));
-    let nvme_latency_histogram: Histogram<NvneHistogramKey> = Histogram::new_from_map(nvme_latency_map, Opts::new("nvme_latency", "Histogram of IO latency"));
+    let io_latency_histogram: Histogram<DiskLatencyHistogramKey> = Histogram::new_from_map(
+        io_latency_map,
+        Opts::new("io_disk_latency", "Histogram of IO latency"),
+    );
+    let nvme_latency_histogram: Histogram<NvneHistogramKey> = Histogram::new_from_map(
+        nvme_latency_map,
+        Opts::new("nvme_latency", "Histogram of IO latency"),
+    );
 
     let r = Registry::new();
     r.register(Box::new(io_latency_histogram)).unwrap();

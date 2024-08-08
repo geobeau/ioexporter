@@ -1,4 +1,3 @@
-use aya_ebpf::{maps::{LruHashMap}};
 #[allow(non_upper_case_globals)]
 #[allow(non_snake_case)]
 #[allow(non_camel_case_types)]
@@ -7,6 +6,7 @@ use aya_ebpf::{
     helpers,
     macros::{map, tracepoint},
     programs::TracePointContext,
+    maps::LruHashMap,
 };
 
 #[repr(C)]

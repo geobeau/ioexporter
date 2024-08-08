@@ -46,7 +46,7 @@ pub fn block_rq_complete(ctx: BtfTracePointContext) -> u32 {
         let timestamp = bpf_ktime_get_ns();
         let disk: vmlinux::gendisk = *((*(*req).q).disk);
         let latency = timestamp - (*req).io_start_time_ns;
-        let flags = (*req).cmd_flags & REQ_OP_MASK;
+        // let flags = (*req).cmd_flags & REQ_OP_MASK;
         BLOCK_HISTOGRAM.observe(DiskLatencyHistogramKey{ major: disk.major, minor: disk.minors }, latency);
         // info!(&ctx, "complete disk {}.{} -> Latency: {}us, (flags: {})", disk.major,disk.minors, latency / 1000, flags);
     }
