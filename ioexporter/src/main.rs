@@ -1,5 +1,5 @@
 use aya::maps::{PerCpuArray, PerCpuHashMap};
-use aya::programs::{BtfTracePoint, KProbe};
+use aya::programs::{BtfTracePoint, KProbe, TracePoint};
 use aya::{include_bytes_aligned, Bpf, Btf, Pod};
 use aya_log::BpfLogger;
 // use libc::name_t;
@@ -7,6 +7,24 @@ use ebpf_histogram::{Histogram, Key, KeyWrapper};
 use log::{debug, info, warn};
 use prometheus::{Opts, Registry, TextEncoder};
 use tokio::signal;
+use phf::{phf_map};
+
+
+static OP_CODE: phf::Map<u8, &'static str> = phf_map! {
+    0x00u8 => "nvme_cmd_flush",
+    0x01u8 => "nvme_cmd_write",
+    0x02u8 => "nvme_cmd_read",
+    0x04u8 => "nvme_cmd_write_uncor",
+    0x05u8 => "nvme_cmd_compare",
+    0x08u8 => "nvme_cmd_write_zeroes",
+    0x09u8 => "nvme_cmd_dsm",
+    0x0du8 => "nvme_cmd_resv_register",
+    0x0eu8 => "nvme_cmd_resv_report",
+    0x11u8 => "nvme_cmd_resv_acquire",
+    0x15u8 => "nvme_cmd_resv_release",
+};
+
+
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 // #[derive(Key)]
@@ -28,6 +46,28 @@ impl Key for DiskLatencyHistogramKey {
         vec![self.major.to_string(), self.minor.to_string()]
     }
 }
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
+#[repr(C)]
+pub struct NvneHistogramKey {
+    // In practice, 31 first bytes are the disk and the last is opcode
+    // This is done because of adding a mere u8 would require adding 32 bytes to keep alignement 
+    pub opaque: [u8; 32],
+}
+
+unsafe impl Send for NvneHistogramKey {}
+unsafe impl Sync for NvneHistogramKey {}
+unsafe impl Pod for NvneHistogramKey {}
+impl Key for NvneHistogramKey {
+    fn get_label_keys() -> Vec<String> {
+        vec!["disk".to_string(), "operation".to_string()]
+    }
+
+    fn get_label_values(&self) -> Vec<String> {
+        vec![String::from_utf8_lossy(&self.opaque[0..31]).to_string(), OP_CODE[&self.opaque[31]].to_string()]
+    }
+}
+
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
@@ -80,22 +120,35 @@ async fn main() -> Result<(), anyhow::Error> {
     let btf = Btf::from_sys_fs()?;
     program.load("block_rq_complete", &btf)?;
     program.attach()?;
+    // sudo ls /sys/kernel/debug/tracing/events/ to find category
+    let program: &mut TracePoint = bpf.program_mut("nvme_setup_cmd").unwrap().try_into()?;
+    program.load()?;
+    program.attach("nvme", "nvme_setup_cmd")?;
+    let program: &mut TracePoint = bpf.program_mut("nvme_complete_rq").unwrap().try_into()?;
+    program.load()?;
+    program.attach("nvme", "nvme_complete_rq")?;
+
 
     let page_cache_metrics: PerCpuArray<_, u64> = PerCpuArray::try_from(
         bpf.take_map("PAGE_CACHE_METRICS")
             .expect("failed to map IP_MAP"),
     )?;
 
-    let map: PerCpuHashMap<_, KeyWrapper<DiskLatencyHistogramKey>, u64> = PerCpuHashMap::try_from(
+    let io_latency_map: PerCpuHashMap<_, KeyWrapper<DiskLatencyHistogramKey>, u64> = PerCpuHashMap::try_from(
         bpf.take_map("BLOCK_HISTOGRAM")
             .expect("failed to map BLOCK_HISTOGRAM"),
     )?;
+    let nvme_latency_map: PerCpuHashMap<_, KeyWrapper<NvneHistogramKey>, u64> = PerCpuHashMap::try_from(
+        bpf.take_map("NVME_HISTOGRAM")
+            .expect("failed to map NVME_HISTOGRAM"),
+    )?;
 
-    let bucket_opts = Opts::new("test_latency", "test counter help");
-    let histogram: Histogram<DiskLatencyHistogramKey> = Histogram::new_from_map(map, bucket_opts);
+    let io_latency_histogram: Histogram<DiskLatencyHistogramKey> = Histogram::new_from_map(io_latency_map, Opts::new("io_disk_latency", "Histogram of IO latency"));
+    let nvme_latency_histogram: Histogram<NvneHistogramKey> = Histogram::new_from_map(nvme_latency_map, Opts::new("nvme_latency", "Histogram of IO latency"));
 
     let r = Registry::new();
-    r.register(Box::new(histogram)).unwrap();
+    r.register(Box::new(io_latency_histogram)).unwrap();
+    r.register(Box::new(nvme_latency_histogram)).unwrap();
     println!("Starting exporter");
     println!("Waiting for Ctrl-C...");
     signal::ctrl_c().await?;

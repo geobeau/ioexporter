@@ -9,6 +9,7 @@
 mod vmlinux;
 mod pagecache;
 mod iolatency;
+mod nvmelatency;
 
 
 #[panic_handler]

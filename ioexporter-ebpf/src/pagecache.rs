@@ -1,13 +1,9 @@
-#![no_std]
-#![no_main]
 #[allow(non_upper_case_globals)]
 #[allow(non_snake_case)]
 #[allow(non_camel_case_types)]
 #[allow(dead_code)]
 
-use aya_ebpf::{macros::{kprobe, map, btf_tracepoint}, programs::{ProbeContext, BtfTracePointContext}, maps::{PerCpuArray}, helpers::bpf_ktime_get_ns};
-use aya_log_ebpf::info;
-use ebpf_histogram_ebpf::BpfHistogram;
+use aya_ebpf::{macros::{kprobe, map}, programs::ProbeContext, maps::PerCpuArray};
 
 
 #[map]

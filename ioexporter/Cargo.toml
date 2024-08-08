@@ -16,6 +16,7 @@ log = "0.4"
 tokio = { version = "1.25", features = ["macros", "rt", "rt-multi-thread", "net", "signal"] }
 prometheus = "0.13.3"
 ebpf-histogram = "0.1.0"
+phf = { version = "0.11.2", features = ["macros"] }
 
 [[bin]]
 name = "ioexporter"
